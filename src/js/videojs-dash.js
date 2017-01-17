@@ -89,6 +89,82 @@ class Html5DashJS {
     this.mediaPlayer_.setProtectionData(this.keySystemOptions_);
     this.mediaPlayer_.attachSource(manifestSource);
 
+    // Add text tracks
+    this.mediaPlayer_.on(dashjs.MediaPlayer.events.TEXT_TRACKS_ADDED, ({tracks}) => {
+      const hasTracks = !!tracks.length;
+      if (!hasTracks) {
+        // Don't try to manually add text tracks if there are no tracks.
+        return;
+      }
+
+      // Delay one tick to see if video.js is using native text tracks (video.js < v5.14).
+      setTimeout(() => {
+        const isUsingNativeTextTracks = !!this.player.textTracks().length;
+        if (isUsingNativeTextTracks) {
+          // Don't add remote tracks manually if video.js is trying to use native tracks. This
+          // doesn't mean that the native tracks will work, it just means that we expect video.js to
+          // work.
+          return;
+        }
+
+        // Add remote tracks
+        tracks
+          // Filter out tracks that have no caption data
+          .filter((track) => track.captionData)
+
+          // Map input data to match HTMLTrackElement spec
+          // https://developer.mozilla.org/en-US/docs/Web/API/HTMLTrackElement
+          .map((track) => Object.assign(
+            {},
+            track,
+            {
+              default: track.defaultTrack,
+              kind: track.kind,
+              label: track.lang,
+              srclang: track.lang,
+            }
+          ))
+
+          // Add track and add cues
+          .map((track) => {
+            const remoteTextTrack = this.player.addRemoteTextTrack(track, true);
+
+            track.captionData
+              // Translate `captionData` into data recognized by video.js.
+              .map((cue) => Object.assign(
+                {},
+                {
+                  endTime: cue.end,
+                  startTime: cue.start,
+                  text: cue.data,
+                },
+                cue.styles,
+                {
+                  vertical: cue.vertical || '',
+                  positionAlign: cue.positionAlign || 'middle',
+                  lineAlign: cue.lineAlign || 'middle',
+                }
+              ))
+              // Manually add `cue`s.
+              .map((cue) => remoteTextTrack.track.addCue(cue))
+            ;
+
+            // Return `track` so we can continue chaning.
+            return track;
+          })
+        ;
+
+        // Now that all the text tracks are created, iterate through them and set the default
+        // property appropriately. Note that more than one track can be listed as a default because
+        // this will create subtitles and captions which can independently have their own defaults.
+        const textTracks = this.player.textTracks();
+        for(let i = 0; i < textTracks.length; i += 1) {
+          const textTrack = textTracks[i];
+          textTrack.mode = textTrack.default ? 'showing' : 'hidden';
+        }
+      }, 0);
+    });
+
     this.tech_.triggerReady();
   }
 

@@ -92,7 +92,9 @@
               setLimitBitrateByPortal: function(value) {
                 setLimitBitrateByPortalCalled = true;
                 setLimitBitrateByPortalValue = value;
-              }
+              },
+
+              on: function() {}
             };
           }
         };
