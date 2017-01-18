@@ -165,6 +165,52 @@ class Html5DashJS {
       }, 0);
     });
 
+    // When `dashjs` finishes loading metadata, create audio tracks for `video.js`.
+    this.mediaPlayer_.on(dashjs.MediaPlayer.events.PLAYBACK_METADATA_LOADED, () => {
+      const dashAudioTracks = this.mediaPlayer_.getTracksFor('audio');
+      const videojsAudioTracks = this.player.audioTracks();
+
+      function generateIdFromTrackIndex(index) {
+        return `dash-audio-${index}`;
+      }
+
+      function findDashAudioTrack(dashAudioTracks, videojsAudioTrack) {
+        return dashAudioTracks.find(({index}) =>
+          generateIdFromTrackIndex(index) === videojsAudioTrack.id
+        );
+      }
+
+      dashAudioTracks.map((track, index) => {
+        // Add the track to the player's audio track list.
+        videojsAudioTracks.addTrack(
+          new videojs.AudioTrack({
+            enabled: index === 0,
+            id: generateIdFromTrackIndex(track.index),
+            kind: track.kind || 'main',
+            label: track.lang,
+            language: track.lang,
+          })
+        );
+      });
+
+      videojsAudioTracks.addEventListener('change', () => {
+        for (let i = 0; i < videojsAudioTracks.length; i++) {
+          const track = videojsAudioTracks[i];
+
+          if (track.enabled) {
+            // Find the audio track we just selected by the id
+            const dashAudioTrack = findDashAudioTrack(dashAudioTracks, track);
+
+            // Set is as the current track
+            this.mediaPlayer_.setCurrentTrack(dashAudioTrack);
+
+            // Stop looping
+            return;
+          }
+        }
+      });
+    });
+
     this.tech_.triggerReady();
   }
 
